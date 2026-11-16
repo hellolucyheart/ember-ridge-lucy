@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ember Ridge — a three.js tactical FPS</title>
+<style>
+  :root {
+    --ink: #f2ead9; --muted: #b8b0a4; --ember: #ff8a3c; --moon: #6fd2f0;
+    --panel: rgba(16, 20, 32, 0.82); --line: rgba(255, 255, 255, 0.16);
+    --font-ui: system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --font-num: ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #141a2e; color: var(--ink); font-family: var(--font-ui); }
+  #game, #game canvas { position: fixed; inset: 0; display: block; }
+  #hud { position: fixed; inset: 0; pointer-events: none; }
+
+  #minimap { position: fixed; left: 18px; top: 18px; width: 168px; height: 126px; border: 1px solid var(--line); border-radius: 6px; }
+  #topbar { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); text-align: center; font-family: var(--font-num); }
+  #round-label { font-size: 11px; letter-spacing: 0.22em; color: var(--muted); }
+  #timer { font-size: 30px; font-weight: 700; line-height: 1.05; text-shadow: 0 2px 8px rgba(0,0,0,0.7); }
+  #scoreline { font-size: 15px; margin-top: 2px; }
+  #scoreline .e { color: var(--ember); font-weight: 700; }
+  #scoreline .m { color: var(--moon); font-weight: 700; }
+  #alive { font-size: 12px; letter-spacing: 0.3em; margin-top: 2px; }
+  #alive .e { color: var(--ember); } #alive .m { color: var(--moon); }
+
+  #feed { position: fixed; right: 18px; top: 18px; text-align: right; font-size: 13px; line-height: 1.55; text-shadow: 0 1px 4px #000; }
+  #money { position: fixed; right: 18px; top: 110px; font-family: var(--font-num); font-size: 18px; color: #ffd9a0; text-shadow: 0 1px 4px #000; }
+
+  #crosshair { position: fixed; left: 50%; top: 50%; width: 0; height: 0; --sp: 6px; }
+  #crosshair i { position: absolute; background: var(--ink); box-shadow: 0 0 3px #000; }
+  #crosshair i:nth-child(1) { left: -1px; top: calc(-10px - var(--sp)); width: 2px; height: 8px; }
+  #crosshair i:nth-child(2) { left: -1px; top: calc(2px + var(--sp)); width: 2px; height: 8px; }
+  #crosshair i:nth-child(3) { top: -1px; left: calc(-10px - var(--sp)); height: 2px; width: 8px; }
+  #crosshair i:nth-child(4) { top: -1px; left: calc(2px + var(--sp)); height: 2px; width: 8px; }
+  #crosshair::after { content: ''; position: absolute; left: -1px; top: -1px; width: 2px; height: 2px; background: var(--ink); }
+  #hitmarker { position: fixed; left: 50%; top: 50%; width: 26px; height: 26px; transform: translate(-50%, -50%) rotate(45deg); opacity: 0; --hm: #ffd9a0; }
+  #hitmarker.on { opacity: 1; }
+  #hitmarker i { position: absolute; background: var(--hm); }
+  #hitmarker i:nth-child(1) { left: 12px; top: 0; width: 2px; height: 8px; }
+  #hitmarker i:nth-child(2) { left: 12px; bottom: 0; width: 2px; height: 8px; }
+  #hitmarker i:nth-child(3) { top: 12px; left: 0; height: 2px; width: 8px; }
+  #hitmarker i:nth-child(4) { top: 12px; right: 0; height: 2px; width: 8px; }
+
+  #vitals { position: fixed; left: 22px; bottom: 22px; width: 230px; }
+  #health-num { font-family: var(--font-num); font-size: 44px; line-height: 1; text-shadow: 0 2px 8px #000; }
+  #armor-num { font-size: 12px; letter-spacing: 0.14em; color: var(--muted); margin-top: 4px; }
+  #health-bar-wrap { height: 6px; background: rgba(255,255,255,0.14); border-radius: 3px; margin-top: 8px; overflow: hidden; }
+  #health-bar { height: 100%; width: 100%; background: #7ddc8a; }
+  #ammo { position: fixed; right: 26px; bottom: 20px; text-align: right; }
+  #ammo-mag { font-family: var(--font-num); font-size: 54px; line-height: 1; text-shadow: 0 2px 8px #000; }
+  #ammo-reserve { font-family: var(--font-num); font-size: 16px; color: var(--muted); }
+  #weapon-name { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  #hint { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); font-size: 12px; color: var(--muted); text-shadow: 0 1px 3px #000; }
+
+  #plant-bar { position: fixed; left: 50%; top: 108px; transform: translateX(-50%); width: 300px; text-align: center; }
+  #plant-label { font-size: 12px; letter-spacing: 0.16em; color: #ffb3a0; margin-bottom: 5px; text-shadow: 0 1px 3px #000; }
+  #plant-track { height: 6px; background: rgba(255,255,255,0.14); border-radius: 3px; overflow: hidden; }
+  #plant-fill { height: 100%; width: 0; background: #ff5a2a; }
+
+  #banner { position: fixed; left: 50%; top: 30%; transform: translateX(-50%); text-align: center; }
+  #banner-title { font-size: 44px; font-weight: 800; letter-spacing: 0.06em; text-shadow: 0 3px 14px #000; }
+  #banner-sub { font-size: 16px; color: var(--muted); margin-top: 6px; text-shadow: 0 1px 4px #000; }
+
+  .overlay { position: fixed; inset: 0; display: grid; place-items: center; padding: 24px; background: rgba(10, 14, 26, 0.72); pointer-events: auto; }
+  .overlay[hidden] { display: none; }
+  .panel { width: min(480px, 100%); padding: 34px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; backdrop-filter: blur(4px); }
+  .panel h1 { margin: 0 0 4px; font-size: 38px; line-height: 1.1; letter-spacing: -0.02em; }
+  .panel h1 span { color: var(--ember); }
+  .panel p { margin: 0 0 20px; font-size: 15px; line-height: 1.55; color: var(--muted); }
+  .panel .teams { font-size: 13px; line-height: 1.7; color: var(--ink); margin: 0 0 20px; }
+  .panel .teams b.e { color: var(--ember); } .panel .teams b.m { color: var(--moon); }
+  #play { font: inherit; font-weight: 600; padding: 13px 20px; border: 1px solid var(--ember); border-radius: 8px; background: var(--ember); color: #1a1208; cursor: pointer; }
+  #play:hover { background: #ffb347; border-color: #ffb347; }
+  .keys { margin: 22px 0 0; padding: 0; list-style: none; display: grid; gap: 7px; font-size: 13px; color: var(--muted); }
+  .keys kbd { padding: 2px 7px; border: 1px solid var(--line); border-radius: 4px; font-family: var(--font-num); font-size: 11px; color: var(--ink); }
+
+  #buy { position: fixed; right: 18px; top: 50%; transform: translateY(-50%); width: 320px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px; pointer-events: auto; }
+  #buy[hidden] { display: none; }
+  #buy h2 { margin: 0 0 2px; font-size: 18px; }
+  #buy-money { font-family: var(--font-num); color: #ffd9a0; font-size: 15px; margin-bottom: 12px; }
+  #buy-list { display: grid; gap: 8px; }
+  #buy-list button { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; text-align: left; font: inherit; color: var(--ink); background: rgba(255,255,255,0.05); border: 1px solid var(--line); border-radius: 7px; padding: 9px 11px; cursor: pointer; }
+  #buy-list button:hover:not(:disabled) { border-color: var(--ember); }
+  #buy-list button:disabled { opacity: 0.45; cursor: default; }
+  #buy-list button b { font-size: 14px; }
+  #buy-list button span { font-family: var(--font-num); color: #ffd9a0; }
+  #buy-list button em { font-style: normal; font-size: 11px; letter-spacing: 0.12em; color: var(--muted); }
+  #buy-list button small { grid-column: 1 / -1; font-size: 11px; color: var(--muted); }
+  #buy .close-hint { margin: 12px 0 0; font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div id="game"></div>
+
+<div id="hud" aria-hidden="true">
+  <canvas id="minimap" width="168" height="126"></canvas>
+  <div id="topbar">
+    <div id="round-label">ROUND 1</div>
+    <div id="timer">1:40</div>
+    <div id="scoreline"><span class="e">EMBER <b id="score-ember">0</b></span> — <span class="m"><b id="score-moon">0</b> MOON</span></div>
+    <div id="alive"><span class="e" id="alive-ember">●●●●●</span> <span class="m" id="alive-moon">●●●●●</span></div>
+  </div>
+  <div id="feed"></div>
+  <div id="money">$800</div>
+  <div id="crosshair"><i></i><i></i><i></i><i></i></div>
+  <div id="hitmarker"><i></i><i></i><i></i><i></i></div>
+  <div id="vitals">
+    <div id="health-num">100</div>
+    <div id="armor-num">NO ARMOUR</div>
+    <div id="health-bar-wrap"><div id="health-bar"></div></div>
+  </div>
+  <div id="ammo"><span id="ammo-mag">12</span><span id="ammo-reserve">/ 48</span><div id="weapon-name">Kite Pistol</div></div>
+  <div id="hint">WASD move · Mouse aim · Click fire · R reload · B buy · Ctrl crouch · G grenade</div>
+  <div id="plant-bar" hidden><div id="plant-label"></div><div id="plant-track"><div id="plant-fill"></div></div></div>
+  <div id="banner" hidden><div id="banner-title"></div><div id="banner-sub"></div></div>
+</div>
+
+<div id="buy" hidden>
+  <h2>Buy phase</h2>
+  <div id="buy-money">$800</div>
+  <div id="buy-list"></div>
+  <p class="close-hint">Press B or wait for the round to start. Keys 1–5 buy too.</p>
+</div>
+
+<div id="overlay" class="overlay">
+  <section class="panel" role="dialog" aria-modal="true">
+    <h1>Ember <span>Ridge</span></h1>
+    <p>A round-based tactical FPS on a hillside shrine at dusk. Plant the Ember Core at Moon Gate (A) or Ember Shrine (B) — or eliminate the Moon team. Earn money, buy better guns, win 5 rounds.</p>
+    <p class="teams"><b class="e">EMBER — you</b> attack with the core &nbsp;·&nbsp; <b class="m">MOON — bots</b> defend the shrines<br>First to 5 rounds takes the match. Headshots hurt. Standing still pays.</p>
+    <button id="play" type="button">Click to play</button>
+    <ul class="keys">
+      <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move &nbsp; <kbd>Mouse</kbd> Look &nbsp; <kbd>Click</kbd> Fire</li>
+      <li><kbd>R</kbd> Reload &nbsp; <kbd>B</kbd> Buy menu &nbsp; <kbd>G</kbd> Throw Ember Burst</li>
+      <li><kbd>Ctrl</kbd> Crouch &nbsp; <kbd>Space</kbd> Jump &nbsp; <kbd>1–5</kbd> Buy quickly</li>
+    </ul>
+  </section>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/three.module.min.js"
+  }
+}
+</script>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
